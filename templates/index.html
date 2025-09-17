@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo List App</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <h1 class="text-center mb-4">
+                    <i class="bi bi-check2-square"></i> Todo List
+                </h1>
+
+                <!-- Add Todo Form -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Add New Todo</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="todoForm">
+                            <div class="mb-3">
+                                <label for="todoTitle" class="form-label">Title</label>
+                                <input type="text" class="form-control" id="todoTitle" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="todoDescription" class="form-label">Description</label>
+                                <textarea class="form-control" id="todoDescription" rows="3"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-plus-circle"></i> Add Todo
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Todos List -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Your Todos</h5>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="loadTodos()">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="todosList">
+                            <div class="text-center text-muted">
+                                <i class="bi bi-hourglass-split"></i> Loading todos...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast for notifications -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto">Todo App</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toastBody">
+                <!-- Toast message will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Global variables
+        let todos = [];
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTodos();
+
+            // Add form submit handler
+            document.getElementById('todoForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                addTodo();
+            });
+        });
+
+        // Load todos from API
+        async function loadTodos() {
+            try {
+                const response = await fetch('/api/todos');
+                todos = await response.json();
+                renderTodos();
+            } catch (error) {
+                showToast('Error loading todos: ' + error.message, 'error');
+            }
+        }
+
+        // Render todos in the UI
+        function renderTodos() {
+            const todosList = document.getElementById('todosList');
+
+            if (todos.length === 0) {
+                todosList.innerHTML = `
+                    <div class="text-center text-muted">
+                        <i class="bi bi-clipboard-x"></i>
+                        <p class="mt-2">No todos yet. Add one above!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            todosList.innerHTML = todos.map(todo => `
+                <div class="d-flex align-items-center justify-content-between p-3 border rounded mb-2 ${todo.completed ? 'bg-light' : ''}">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center">
+                            <input type="checkbox" class="form-check-input me-2"
+                                   ${todo.completed ? 'checked' : ''}
+                                   onchange="toggleTodo(${todo.id}, this.checked)">
+                            <div>
+                                <h6 class="mb-1 ${todo.completed ? 'text-decoration-line-through text-muted' : ''}">${escapeHtml(todo.title)}</h6>
+                                ${todo.description ? `<small class="text-muted">${escapeHtml(todo.description)}</small>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ms-2">
+                        <button class="btn btn-outline-primary btn-sm me-1" onclick="editTodo(${todo.id})">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="deleteTodo(${todo.id})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Add new todo
+        async function addTodo() {
+            const title = document.getElementById('todoTitle').value.trim();
+            const description = document.getElementById('todoDescription').value.trim();
+
+            if (!title) {
+                showToast('Please enter a title', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/todos', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        title: title,
+                        description: description
+                    })
+                });
+
+                if (response.ok) {
+                    document.getElementById('todoForm').reset();
+                    loadTodos();
+                    showToast('Todo added successfully!', 'success');
+                } else {
+                    const error = await response.json();
+                    showToast('Error: ' + error.error, 'error');
+                }
+            } catch (error) {
+                showToast('Error adding todo: ' + error.message, 'error');
+            }
+        }
+
+        // Toggle todo completion
+        async function toggleTodo(id, completed) {
+            try {
+                const response = await fetch(`/api/todos/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ completed: completed })
+                });
+
+                if (response.ok) {
+                    loadTodos();
+                    showToast(completed ? 'Todo completed!' : 'Todo marked as incomplete', 'success');
+                } else {
+                    showToast('Error updating todo', 'error');
+                    loadTodos(); // Reload to reset checkbox state
+                }
+            } catch (error) {
+                showToast('Error updating todo: ' + error.message, 'error');
+                loadTodos(); // Reload to reset checkbox state
+            }
+        }
+
+        // Edit todo (simple prompt-based editing)
+        async function editTodo(id) {
+            const todo = todos.find(t => t.id === id);
+            if (!todo) return;
+
+            const newTitle = prompt('Edit title:', todo.title);
+            if (newTitle === null) return; // User cancelled
+
+            const newDescription = prompt('Edit description:', todo.description || '');
+            if (newDescription === null) return; // User cancelled
+
+            try {
+                const response = await fetch(`/api/todos/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        title: newTitle.trim(),
+                        description: newDescription.trim()
+                    })
+                });
+
+                if (response.ok) {
+                    loadTodos();
+                    showToast('Todo updated successfully!', 'success');
+                } else {
+                    showToast('Error updating todo', 'error');
+                }
+            } catch (error) {
+                showToast('Error updating todo: ' + error.message, 'error');
+            }
+        }
+
+        // Delete todo
+        async function deleteTodo(id) {
+            if (!confirm('Are you sure you want to delete this todo?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/todos/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    loadTodos();
+                    showToast('Todo deleted successfully!', 'success');
+                } else {
+                    showToast('Error deleting todo', 'error');
+                }
+            } catch (error) {
+                showToast('Error deleting todo: ' + error.message, 'error');
+            }
+        }
+
+        // Show toast notification
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastBody = document.getElementById('toastBody');
+
+            toastBody.textContent = message;
+
+            // Add appropriate styling based on type
+            toast.className = 'toast';
+            if (type === 'success') {
+                toast.classList.add('bg-success', 'text-white');
+            } else if (type === 'error') {
+                toast.classList.add('bg-danger', 'text-white');
+            }
+
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+        }
+
+        // Utility function to escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
