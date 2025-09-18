@@ -24,6 +24,7 @@ services:
     build: .
     container_name: todoapp_flask
     environment:
+      DATABASE_TYPE: mysql
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: todoapp
