@@ -8,9 +8,65 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container mt-5">
-        <div class="row justify-content-center">
-            <div class="col-md-8">
+    <div class="container-fluid mt-3">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">
+                            <i class="bi bi-gear"></i> Testing & Monitoring
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <h6 class="text-muted mb-3">Health Checks</h6>
+                        <div class="d-grid gap-2 mb-3">
+                            <button class="btn btn-success btn-sm" onclick="checkHealth()">
+                                <i class="bi bi-heart-pulse"></i> Health Check
+                            </button>
+                        </div>
+
+                        <h6 class="text-muted mb-3">Simulate Errors</h6>
+                        <div class="d-grid gap-2 mb-3">
+                            <button class="btn btn-warning btn-sm" onclick="simulateError('404')">
+                                <i class="bi bi-exclamation-triangle"></i> 404 Error
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="simulateError('500')">
+                                <i class="bi bi-x-circle"></i> 500 Error
+                            </button>
+                            <button class="btn btn-info btn-sm" onclick="simulateError('timeout')">
+                                <i class="bi bi-clock"></i> Slow Response
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="simulateError('database-error')">
+                                <i class="bi bi-database-x"></i> DB Error
+                            </button>
+                            <button class="btn btn-outline-warning btn-sm" onclick="simulateError('auth-error')">
+                                <i class="bi bi-shield-x"></i> Auth Error
+                            </button>
+                        </div>
+
+                        <h6 class="text-muted mb-3">Monitoring</h6>
+                        <div class="d-grid gap-2 mb-3">
+                            <button class="btn btn-primary btn-sm" onclick="viewMetrics()">
+                                <i class="bi bi-graph-up"></i> View Metrics
+                            </button>
+                            <button class="btn btn-outline-primary btn-sm" onclick="checkSplunkStatus()">
+                                <i class="bi bi-cloud"></i> Splunk Status
+                            </button>
+                        </div>
+
+                        <h6 class="text-muted mb-3">Test Results</h6>
+                        <div id="testResults" class="small text-muted">
+                            No tests run yet
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-9">
+                <div class="row justify-content-center">
+                    <div class="col-lg-10">
                 <h1 class="text-center mb-4">
                     <i class="bi bi-check2-square"></i> Todo List
                 </h1>
@@ -51,6 +107,7 @@
                                 <i class="bi bi-hourglass-split"></i> Loading todos...
                             </div>
                         </div>
+                    </div>
                     </div>
                 </div>
             </div>
@@ -275,6 +332,105 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // Health check function
+        async function checkHealth() {
+            updateTestResults('Running health check...', 'info');
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+
+                if (response.ok) {
+                    updateTestResults(`✅ Health Check: ${data.status} (DB: ${data.database})`, 'success');
+                    showToast('Health check passed!', 'success');
+                } else {
+                    updateTestResults(`❌ Health Check: ${data.status} (${response.status})`, 'error');
+                    showToast('Health check failed!', 'error');
+                }
+            } catch (error) {
+                updateTestResults(`❌ Health Check: Failed to connect (${error.message})`, 'error');
+                showToast('Health check failed: ' + error.message, 'error');
+            }
+        }
+
+        // Simulate error function
+        async function simulateError(errorType) {
+            updateTestResults(`Simulating ${errorType} error...`, 'info');
+
+            const startTime = Date.now();
+            try {
+                const response = await fetch(`/simulate/${errorType}`);
+                const endTime = Date.now();
+                const duration = endTime - startTime;
+
+                const data = await response.json();
+
+                const statusText = response.status === 200 ? '✅' : '❌';
+                updateTestResults(`${statusText} ${errorType.toUpperCase()}: ${data.error || data.message} (${response.status}, ${duration}ms)`,
+                    response.status === 200 ? 'success' : 'error');
+
+                if (response.status === 200) {
+                    showToast(`${errorType} simulation completed`, 'success');
+                } else {
+                    showToast(`${errorType} error simulated (${response.status})`, 'error');
+                }
+            } catch (error) {
+                const endTime = Date.now();
+                const duration = endTime - startTime;
+                updateTestResults(`❌ ${errorType.toUpperCase()}: Network error (${duration}ms)`, 'error');
+                showToast(`${errorType} simulation failed: ` + error.message, 'error');
+            }
+        }
+
+        // View metrics function
+        function viewMetrics() {
+            updateTestResults('Opening metrics endpoint...', 'info');
+            window.open('/metrics', '_blank');
+            updateTestResults('✅ Metrics endpoint opened in new tab', 'success');
+        }
+
+        // Check Splunk status function
+        async function checkSplunkStatus() {
+            updateTestResults('Checking Splunk status...', 'info');
+            try {
+                const response = await fetch('/splunk/status');
+                const data = await response.json();
+
+                if (response.ok) {
+                    const status = data.splunk_configured ? '✅ Configured' : '❌ Not configured';
+                    updateTestResults(`Splunk Status: ${status}`, data.splunk_configured ? 'success' : 'error');
+                    showToast(`Splunk is ${data.splunk_configured ? 'configured' : 'not configured'}`,
+                        data.splunk_configured ? 'success' : 'error');
+                } else {
+                    updateTestResults('❌ Splunk Status: Failed to check', 'error');
+                    showToast('Failed to check Splunk status', 'error');
+                }
+            } catch (error) {
+                updateTestResults(`❌ Splunk Status: ${error.message}`, 'error');
+                showToast('Splunk status check failed: ' + error.message, 'error');
+            }
+        }
+
+        // Update test results display
+        function updateTestResults(message, type = 'info') {
+            const testResults = document.getElementById('testResults');
+            const timestamp = new Date().toLocaleTimeString();
+
+            const className = type === 'success' ? 'text-success' :
+                            type === 'error' ? 'text-danger' : 'text-info';
+
+            const resultHTML = `<div class="${className} mb-1">
+                <small>[${timestamp}] ${message}</small>
+            </div>`;
+
+            testResults.innerHTML = resultHTML + testResults.innerHTML;
+
+            // Keep only last 10 results
+            const results = testResults.children;
+            while (results.length > 10) {
+                testResults.removeChild(results[results.length - 1]);
+            }
         }
     </script>
 </body>

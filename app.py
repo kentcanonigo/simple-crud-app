@@ -249,6 +249,111 @@ def splunk_status():
         }
     })
 
+@app.route('/health')
+def health_check():
+    """Health check endpoint for monitoring"""
+    try:
+        # Test database connection
+        db.session.execute('SELECT 1')
+        db_status = "healthy"
+    except Exception as e:
+        db_status = f"unhealthy: {str(e)}"
+
+    health_data = {
+        'status': 'healthy' if db_status == 'healthy' else 'unhealthy',
+        'database': db_status,
+        'timestamp': time.time(),
+        'version': '1.0.0'
+    }
+
+    # Log health check to Splunk
+    if splunk_logger:
+        try:
+            splunk_logger.log_business_event("health_check", health_data)
+        except Exception as e:
+            logging.error(f"Failed to log health check to Splunk: {e}")
+
+    status_code = 200 if health_data['status'] == 'healthy' else 503
+    return jsonify(health_data), status_code
+
+@app.route('/simulate/404')
+def simulate_404():
+    """Simulate a 404 error for testing"""
+    if splunk_logger:
+        try:
+            splunk_logger.log_business_event("simulated_error", {
+                "error_type": "404",
+                "endpoint": "/simulate/404",
+                "message": "Simulated 404 error for testing"
+            })
+        except Exception as e:
+            logging.error(f"Failed to log simulated error to Splunk: {e}")
+
+    return jsonify({'error': 'Resource not found', 'simulated': True}), 404
+
+@app.route('/simulate/500')
+def simulate_500():
+    """Simulate a 500 error for testing"""
+    if splunk_logger:
+        try:
+            splunk_logger.log_business_event("simulated_error", {
+                "error_type": "500",
+                "endpoint": "/simulate/500",
+                "message": "Simulated 500 error for testing"
+            })
+        except Exception as e:
+            logging.error(f"Failed to log simulated error to Splunk: {e}")
+
+    return jsonify({'error': 'Internal server error', 'simulated': True}), 500
+
+@app.route('/simulate/timeout')
+def simulate_timeout():
+    """Simulate a slow response for testing"""
+    import time
+    if splunk_logger:
+        try:
+            splunk_logger.log_business_event("simulated_slow_response", {
+                "endpoint": "/simulate/timeout",
+                "delay_seconds": 5,
+                "message": "Simulated slow response for testing"
+            })
+        except Exception as e:
+            logging.error(f"Failed to log simulated timeout to Splunk: {e}")
+
+    time.sleep(5)  # 5 second delay
+    return jsonify({'message': 'Slow response completed', 'delay': '5 seconds', 'simulated': True}), 200
+
+@app.route('/simulate/database-error')
+def simulate_database_error():
+    """Simulate a database error for testing"""
+    if splunk_logger:
+        try:
+            splunk_logger.log_business_event("simulated_error", {
+                "error_type": "database",
+                "endpoint": "/simulate/database-error",
+                "message": "Simulated database error for testing"
+            })
+            splunk_logger.log_database_operation("SELECT", "invalid_table", False)
+        except Exception as e:
+            logging.error(f"Failed to log simulated database error to Splunk: {e}")
+
+    return jsonify({'error': 'Database connection failed', 'simulated': True}), 503
+
+@app.route('/simulate/auth-error')
+def simulate_auth_error():
+    """Simulate an authentication error for testing"""
+    if splunk_logger:
+        try:
+            splunk_logger.log_business_event("simulated_error", {
+                "error_type": "401",
+                "endpoint": "/simulate/auth-error",
+                "message": "Simulated authentication error for testing"
+            })
+        except Exception as e:
+            logging.error(f"Failed to log simulated auth error to Splunk: {e}")
+
+    return jsonify({'error': 'Authentication required', 'simulated': True}), 401
+
 def create_app():
     """Application factory pattern for better testability"""
     return app
