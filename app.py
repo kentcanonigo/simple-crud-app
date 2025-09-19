@@ -1,13 +1,15 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, g
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from dotenv import load_dotenv
 from splunk_integration import create_splunk_integration
+from structured_logging import setup_structured_logging, StructuredLogger
 import time
 import os
 import pymysql
 import logging
+import uuid
 
 # Load environment variables from .env file
 load_dotenv()
@@ -53,14 +55,12 @@ migrate = Migrate(app, db)
 REQUEST_COUNT = Counter('flask_requests_total', 'Total requests', ['method', 'endpoint'])
 REQUEST_LATENCY = Histogram('flask_request_duration_seconds', 'Request latency')
 
-# Initialize Splunk integration
+# Initialize Splunk integration (fallback for direct HEC if needed)
 splunk_hec, splunk_metrics_exporter, splunk_logger = create_splunk_integration()
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configure structured logging for Kubernetes/Splunk
+setup_structured_logging()
+structured_logger = StructuredLogger('todoapp')
 
 class Todo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -81,6 +81,7 @@ class Todo(db.Model):
 @app.before_request
 def before_request():
     request.start_time = time.time()
+    g.request_id = str(uuid.uuid4())
 
 @app.after_request
 def after_request(response):
@@ -88,7 +89,18 @@ def after_request(response):
     request_latency = time.time() - request.start_time
     REQUEST_LATENCY.observe(request_latency)
 
-    # Send request data to Splunk if configured
+    # Log request with structured logging
+    try:
+        structured_logger.log_request(
+            method=request.method,
+            endpoint=request.endpoint or request.path,
+            status_code=response.status_code,
+            duration=request_latency
+        )
+    except Exception as e:
+        logging.error(f"Failed to log request: {e}")
+
+    # Fallback to direct Splunk HEC if configured
     if splunk_logger:
         try:
             splunk_logger.log_request(
@@ -98,7 +110,7 @@ def after_request(response):
                 duration=request_latency
             )
         except Exception as e:
-            logging.error(f"Failed to log request to Splunk: {e}")
+            logging.error(f"Failed to log request to Splunk HEC: {e}")
 
     return response
 
@@ -116,6 +128,10 @@ def create_todo():
     data = request.get_json()
 
     if not data or 'title' not in data:
+        structured_logger.log_business_event("todo_creation_failed", {
+            "reason": "missing_title",
+            "request_data": data
+        })
         if splunk_logger:
             splunk_logger.log_business_event("todo_creation_failed", {
                 "reason": "missing_title",
@@ -133,7 +149,15 @@ def create_todo():
         db.session.add(todo)
         db.session.commit()
 
-        # Log successful todo creation to Splunk
+        # Log successful todo creation
+        structured_logger.log_business_event("todo_created", {
+            "todo_id": todo.id,
+            "title": todo.title,
+            "completed": todo.completed
+        })
+        structured_logger.log_database_operation("INSERT", "todos", True)
+
+        # Fallback to direct Splunk HEC if configured
         if splunk_logger:
             splunk_logger.log_business_event("todo_created", {
                 "todo_id": todo.id,
@@ -146,6 +170,10 @@ def create_todo():
 
     except Exception as e:
         db.session.rollback()
+        structured_logger.log_error("database_error", str(e), context={"operation": "create_todo"})
+        structured_logger.log_database_operation("INSERT", "todos", False)
+
+        # Fallback to direct Splunk HEC if configured
         if splunk_logger:
             splunk_logger.log_error("database_error", str(e), context={"operation": "create_todo"})
             splunk_logger.log_database_operation("INSERT", "todos", False)
@@ -159,21 +187,66 @@ def update_todo(todo_id):
     if not data:
         return jsonify({'error': 'No data provided'}), 400
 
+    old_values = {
+        'title': todo.title,
+        'description': todo.description,
+        'completed': todo.completed
+    }
+
     todo.title = data.get('title', todo.title)
     todo.description = data.get('description', todo.description)
     todo.completed = data.get('completed', todo.completed)
 
-    db.session.commit()
+    try:
+        db.session.commit()
 
-    return jsonify(todo.to_dict())
+        # Log successful update
+        structured_logger.log_business_event("todo_updated", {
+            "todo_id": todo.id,
+            "old_values": old_values,
+            "new_values": {
+                'title': todo.title,
+                'description': todo.description,
+                'completed': todo.completed
+            }
+        })
+        structured_logger.log_database_operation("UPDATE", "todos", True)
+
+        return jsonify(todo.to_dict())
+
+    except Exception as e:
+        db.session.rollback()
+        structured_logger.log_error("database_error", str(e), context={"operation": "update_todo", "todo_id": todo_id})
+        structured_logger.log_database_operation("UPDATE", "todos", False)
+        return jsonify({'error': 'Failed to update todo'}), 500
 
 @app.route('/api/todos/<int:todo_id>', methods=['DELETE'])
 def delete_todo(todo_id):
     todo = Todo.query.get_or_404(todo_id)
-    db.session.delete(todo)
-    db.session.commit()
+    todo_data = {
+        'id': todo.id,
+        'title': todo.title,
+        'completed': todo.completed
+    }
 
-    return jsonify({'message': 'Todo deleted successfully'}), 200
+    try:
+        db.session.delete(todo)
+        db.session.commit()
+
+        # Log successful deletion
+        structured_logger.log_business_event("todo_deleted", {
+            "todo_id": todo_id,
+            "deleted_todo": todo_data
+        })
+        structured_logger.log_database_operation("DELETE", "todos", True)
+
+        return jsonify({'message': 'Todo deleted successfully'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        structured_logger.log_error("database_error", str(e), context={"operation": "delete_todo", "todo_id": todo_id})
+        structured_logger.log_database_operation("DELETE", "todos", False)
+        return jsonify({'error': 'Failed to delete todo'}), 500
 
 @app.route('/metrics')
 def metrics():
@@ -197,6 +270,7 @@ def export_metrics_to_splunk():
             'timestamp': result['timestamp']
         }), 200
     except Exception as e:
+        structured_logger.log_error("metrics_export_error", str(e))
         if splunk_logger:
             splunk_logger.log_error("metrics_export_error", str(e))
         return jsonify({'error': f'Failed to export metrics: {str(e)}'}), 500
@@ -266,12 +340,18 @@ def health_check():
         'version': '1.0.0'
     }
 
-    # Log health check to Splunk
+    # Log health check
+    try:
+        structured_logger.log_business_event("health_check", health_data)
+    except Exception as e:
+        logging.error(f"Failed to log health check: {e}")
+
+    # Fallback to direct Splunk HEC if configured
     if splunk_logger:
         try:
             splunk_logger.log_business_event("health_check", health_data)
         except Exception as e:
-            logging.error(f"Failed to log health check to Splunk: {e}")
+            logging.error(f"Failed to log health check to Splunk HEC: {e}")
 
     status_code = 200 if health_data['status'] == 'healthy' else 503
     return jsonify(health_data), status_code
@@ -279,6 +359,12 @@ def health_check():
 @app.route('/simulate/404')
 def simulate_404():
     """Simulate a 404 error for testing"""
+    structured_logger.log_business_event("simulated_error", {
+        "error_type": "404",
+        "endpoint": "/simulate/404",
+        "message": "Simulated 404 error for testing"
+    })
+
     if splunk_logger:
         try:
             splunk_logger.log_business_event("simulated_error", {
@@ -287,13 +373,19 @@ def simulate_404():
                 "message": "Simulated 404 error for testing"
             })
         except Exception as e:
-            logging.error(f"Failed to log simulated error to Splunk: {e}")
+            logging.error(f"Failed to log simulated error to Splunk HEC: {e}")
 
     return jsonify({'error': 'Resource not found', 'simulated': True}), 404
 
 @app.route('/simulate/500')
 def simulate_500():
     """Simulate a 500 error for testing"""
+    structured_logger.log_business_event("simulated_error", {
+        "error_type": "500",
+        "endpoint": "/simulate/500",
+        "message": "Simulated 500 error for testing"
+    })
+
     if splunk_logger:
         try:
             splunk_logger.log_business_event("simulated_error", {
@@ -302,7 +394,7 @@ def simulate_500():
                 "message": "Simulated 500 error for testing"
             })
         except Exception as e:
-            logging.error(f"Failed to log simulated error to Splunk: {e}")
+            logging.error(f"Failed to log simulated error to Splunk HEC: {e}")
 
     return jsonify({'error': 'Internal server error', 'simulated': True}), 500
 
@@ -310,6 +402,12 @@ def simulate_500():
 def simulate_timeout():
     """Simulate a slow response for testing"""
     import time
+    structured_logger.log_business_event("simulated_slow_response", {
+        "endpoint": "/simulate/timeout",
+        "delay_seconds": 5,
+        "message": "Simulated slow response for testing"
+    })
+
     if splunk_logger:
         try:
             splunk_logger.log_business_event("simulated_slow_response", {
@@ -318,7 +416,7 @@ def simulate_timeout():
                 "message": "Simulated slow response for testing"
             })
         except Exception as e:
-            logging.error(f"Failed to log simulated timeout to Splunk: {e}")
+            logging.error(f"Failed to log simulated timeout to Splunk HEC: {e}")
 
     time.sleep(5)  # 5 second delay
     return jsonify({'message': 'Slow response completed', 'delay': '5 seconds', 'simulated': True}), 200
@@ -326,6 +424,13 @@ def simulate_timeout():
 @app.route('/simulate/database-error')
 def simulate_database_error():
     """Simulate a database error for testing"""
+    structured_logger.log_business_event("simulated_error", {
+        "error_type": "database",
+        "endpoint": "/simulate/database-error",
+        "message": "Simulated database error for testing"
+    })
+    structured_logger.log_database_operation("SELECT", "invalid_table", False)
+
     if splunk_logger:
         try:
             splunk_logger.log_business_event("simulated_error", {
@@ -335,13 +440,19 @@ def simulate_database_error():
             })
             splunk_logger.log_database_operation("SELECT", "invalid_table", False)
         except Exception as e:
-            logging.error(f"Failed to log simulated database error to Splunk: {e}")
+            logging.error(f"Failed to log simulated database error to Splunk HEC: {e}")
 
     return jsonify({'error': 'Database connection failed', 'simulated': True}), 503
 
 @app.route('/simulate/auth-error')
 def simulate_auth_error():
     """Simulate an authentication error for testing"""
+    structured_logger.log_business_event("simulated_error", {
+        "error_type": "401",
+        "endpoint": "/simulate/auth-error",
+        "message": "Simulated authentication error for testing"
+    })
+
     if splunk_logger:
         try:
             splunk_logger.log_business_event("simulated_error", {
@@ -350,7 +461,7 @@ def simulate_auth_error():
                 "message": "Simulated authentication error for testing"
             })
         except Exception as e:
-            logging.error(f"Failed to log simulated auth error to Splunk: {e}")
+            logging.error(f"Failed to log simulated auth error to Splunk HEC: {e}")
 
     return jsonify({'error': 'Authentication required', 'simulated': True}), 401
 
