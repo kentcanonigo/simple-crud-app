@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todoapp
+  labels:
+    app: todoapp
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: todoapp
+  template:
+    metadata:
+      labels:
+        app: todoapp
+      annotations:
+        # Enable Prometheus scraping for OTel collector
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+        # Splunk indexing hints for OTel collector
+        splunk.com/index: "app_logs"
+        splunk.com/sourcetype: "todoapp"
+        # Container log parsing hints
+        logging/parser: "json"
+    spec:
+      containers:
+      - name: todoapp
+        image: todoapp:latest
+        ports:
+        - containerPort: 5000
+        env:
+        - name: FLASK_ENV
+          value: "production"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: todoapp-secrets
+              key: database-url
+        - name: PORT
+          value: "5000"
+        # Improved health checks using dedicated endpoint
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: todoapp-service
+  labels:
+    app: todoapp
+  annotations:
+    # Service annotations for monitoring
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "5000"
+spec:
+  selector:
+    app: todoapp
+  ports:
+  - port: 80
+    targetPort: 5000
+    name: http
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: todoapp-secrets
+type: Opaque
+data:
+  # Base64 encoded database URL
+  # Example: mysql+pymysql://user:password@mysql-host:3306/database
+  database-url: bXlzcWwrcHlteXNxbDovL3RvZG9hcHA6dG9kb2FwcDEyM0BteXNxbC1zZXJ2aWNlOjMzMDYvdG9kb2FwcA==
