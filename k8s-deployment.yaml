@@ -141,7 +141,6 @@ metadata:
   name: todoapp-secrets
 type: Opaque
 data:
-  # Base64 encoded database URL
   # mysql+pymysql://todoapp:todoapp123@mysql-service.todo-app:3306/todoapp
   database-url: bXlzcWwrcHlteXNxbDovL3RvZG9hcHA6dG9kb2FwcDEyM0BteXNxbC1zZXJ2aWNlLnRvZG8tYXBwOjMzMDYvdG9kb2FwcA==
 ---
@@ -151,13 +150,13 @@ metadata:
   name: todoapp-monitor
   labels:
     app: todoapp
-    release: prometheus      # ⚡ Must match your Prometheus release label
+    release: prometheus
 spec:
   selector:
     matchLabels:
       app: todoapp     
   endpoints:
-    - port: 3000              # ⚡ Must match Service port name
+    - port: 5000
       path: /metrics
       interval: 30s
       scrapeTimeout: 10s
