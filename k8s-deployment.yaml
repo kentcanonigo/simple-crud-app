@@ -132,6 +132,7 @@ spec:
     app: todoapp
   ports:
   - port: 80
+    name: http
     targetPort: 5000
   type: NodePort
 ---
@@ -156,7 +157,7 @@ spec:
     matchLabels:
       app: todoapp     
   endpoints:
-    - port: 5000
+    - port: http
       path: /metrics
       interval: 30s
       scrapeTimeout: 10s
