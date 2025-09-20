@@ -2,30 +2,51 @@ pipeline {
     agent {
         kubernetes {
             yaml """
-              apiVersion: v1
-              kind: Pod
-              spec:
-                serviceAccountName: jenkins
-                containers:
-                - name: kaniko
-                  image: gcr.io/kaniko-project/executor:debug
-                  command: ["sleep"]
-                  args: ["9999999"]
-                  volumeMounts:
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  labels:
+                    jenkins: agent
+                spec:
+                  serviceAccountName: jenkins
+                  containers:
+                  - name: kaniko
+                    image: gcr.io/kaniko-project/executor:debug
+                    command:
+                    - sleep
+                    args:
+                    - 9999999
+                    volumeMounts:
+                    - name: docker-config
+                      mountPath: /kaniko/.docker
+                      readOnly: true
+                    resources:
+                      requests:
+                        memory: "512Mi"
+                        cpu: "500m"
+                      limits:
+                        memory: "1Gi"
+                        cpu: "1000m"
+                  - name: kubectl
+                    image: alpine/k8s:1.28.13
+                    command:
+                    - sleep
+                    args:
+                    - 9999999
+                    resources:
+                      requests:
+                        memory: "128Mi"
+                        cpu: "100m"
+                      limits:
+                        memory: "256Mi"
+                        cpu: "200m"
+                  volumes:
                   - name: docker-config
-                    mountPath: /kaniko/.docker
-                    readOnly: true
-                - name: kubectl
-                  image: alpine/k8s:1.28.13
-                  command: ["sleep"]
-                  args: ["9999999"]
-                volumes:
-                - name: docker-config
-                  secret:
-                    secretName: docker-registry-config-kent
-                    items:
-                    - key: .dockerconfigjson
-                      path: config.json
+                    secret:
+                      secretName: docker-registry-config-kent
+                      items:
+                      - key: .dockerconfigjson
+                        path: config.json
             """
         }
     }

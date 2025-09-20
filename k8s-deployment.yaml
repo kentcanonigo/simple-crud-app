@@ -144,3 +144,20 @@ data:
   # Base64 encoded database URL
   # mysql+pymysql://todoapp:todoapp123@mysql-service.todo-app:3306/todoapp
   database-url: bXlzcWwrcHlteXNxbDovL3RvZG9hcHA6dG9kb2FwcDEyM0BteXNxbC1zZXJ2aWNlLnRvZG8tYXBwOjMzMDYvdG9kb2FwcA==
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: todoapp-monitor
+  labels:
+    app: todoapp
+    release: prometheus      # ⚡ Must match your Prometheus release label
+spec:
+  selector:
+    matchLabels:
+      app: todoapp     
+  endpoints:
+    - port: 3000              # ⚡ Must match Service port name
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
