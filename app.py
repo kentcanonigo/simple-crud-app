@@ -52,8 +52,8 @@ db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
 # Prometheus metrics
-REQUEST_COUNT = Counter('flask_requests_total', 'Total requests', ['method', 'endpoint'])
-REQUEST_LATENCY = Histogram('flask_request_duration_seconds', 'Request latency')
+REQUEST_COUNT = Counter('todoapp_requests_total', 'Total requests', ['method', 'endpoint'])
+REQUEST_LATENCY = Histogram('todoapp_request_duration_seconds', 'Request latency')
 
 # Configure structured logging for Kubernetes/Splunk
 setup_structured_logging()
@@ -92,7 +92,8 @@ def after_request(response):
             method=request.method,
             endpoint=request.endpoint or request.path,
             status_code=response.status_code,
-            duration=request_latency
+            duration=request_latency,
+            log_level='INFO'
         )
     except Exception as e:
         logging.error(f"Failed to log request: {e}")
@@ -103,7 +104,7 @@ def after_request(response):
 def index():
     return render_template('index.html')
 
-@app.route('/api/todos', methods=['GET'])
+@app.route('/api/todos', methods=['GET'], endpoint='get_todos_api')
 def get_todos():
     todos = Todo.query.all()
     return jsonify([todo.to_dict() for todo in todos])
@@ -116,7 +117,7 @@ def create_todo():
         structured_logger.log_business_event("todo_creation_failed", {
             "reason": "missing_title",
             "request_data": data
-        })
+        }, log_level='WARN')
         return jsonify({'error': 'Title is required'}), 400
 
     todo = Todo(
@@ -134,15 +135,15 @@ def create_todo():
             "todo_id": todo.id,
             "title": todo.title,
             "completed": todo.completed
-        })
-        structured_logger.log_database_operation("INSERT", "todos", True)
+        }, log_level='INFO')
+        structured_logger.log_database_operation("INSERT", "todos", True, log_level='INFO')
 
         return jsonify(todo.to_dict()), 201
 
     except Exception as e:
         db.session.rollback()
-        structured_logger.log_error("database_error", str(e), context={"operation": "create_todo"})
-        structured_logger.log_database_operation("INSERT", "todos", False)
+        structured_logger.log_error("database_error", str(e), context={"operation": "create_todo"}, log_level='CRITICAL')
+        structured_logger.log_database_operation("INSERT", "todos", False, log_level='CRITICAL')
         return jsonify({'error': 'Failed to create todo'}), 500
 
 @app.route('/api/todos/<int:todo_id>', methods=['PUT'])
@@ -175,15 +176,15 @@ def update_todo(todo_id):
                 'description': todo.description,
                 'completed': todo.completed
             }
-        })
-        structured_logger.log_database_operation("UPDATE", "todos", True)
+        }, log_level='INFO')
+        structured_logger.log_database_operation("UPDATE", "todos", True, log_level='INFO')
 
         return jsonify(todo.to_dict())
 
     except Exception as e:
         db.session.rollback()
-        structured_logger.log_error("database_error", str(e), context={"operation": "update_todo", "todo_id": todo_id})
-        structured_logger.log_database_operation("UPDATE", "todos", False)
+        structured_logger.log_error("database_error", str(e), context={"operation": "update_todo", "todo_id": todo_id}, log_level='CRITICAL')
+        structured_logger.log_database_operation("UPDATE", "todos", False, log_level='CRITICAL')
         return jsonify({'error': 'Failed to update todo'}), 500
 
 @app.route('/api/todos/<int:todo_id>', methods=['DELETE'])
@@ -203,15 +204,15 @@ def delete_todo(todo_id):
         structured_logger.log_business_event("todo_deleted", {
             "todo_id": todo_id,
             "deleted_todo": todo_data
-        })
-        structured_logger.log_database_operation("DELETE", "todos", True)
+        }, log_level='INFO')
+        structured_logger.log_database_operation("DELETE", "todos", True, log_level='INFO')
 
         return jsonify({'message': 'Todo deleted successfully'}), 200
 
     except Exception as e:
         db.session.rollback()
-        structured_logger.log_error("database_error", str(e), context={"operation": "delete_todo", "todo_id": todo_id})
-        structured_logger.log_database_operation("DELETE", "todos", False)
+        structured_logger.log_error("database_error", str(e), context={"operation": "delete_todo", "todo_id": todo_id}, log_level='CRITICAL')
+        structured_logger.log_database_operation("DELETE", "todos", False, log_level='CRITICAL')
         return jsonify({'error': 'Failed to delete todo'}), 500
 
 @app.route('/metrics')
@@ -237,7 +238,7 @@ def health_check():
 
     # Log health check
     try:
-        structured_logger.log_business_event("health_check", health_data)
+        structured_logger.log_business_event("health_check", health_data, log_level='DEBUG')
     except Exception as e:
         logging.error(f"Failed to log health check: {e}")
 
@@ -251,7 +252,7 @@ def simulate_404():
         "error_type": "404",
         "endpoint": "/simulate/404",
         "message": "Simulated 404 error for testing"
-    })
+    }, log_level='DEV')
 
     return jsonify({'error': 'Resource not found', 'simulated': True}), 404
 
@@ -262,7 +263,7 @@ def simulate_500():
         "error_type": "500",
         "endpoint": "/simulate/500",
         "message": "Simulated 500 error for testing"
-    })
+    }, log_level='DEV')
 
     return jsonify({'error': 'Internal server error', 'simulated': True}), 500
 
@@ -274,7 +275,7 @@ def simulate_timeout():
         "endpoint": "/simulate/timeout",
         "delay_seconds": 5,
         "message": "Simulated slow response for testing"
-    })
+    }, log_level='DEV')
 
     time.sleep(5)  # 5 second delay
     return jsonify({'message': 'Slow response completed', 'delay': '5 seconds', 'simulated': True}), 200
@@ -286,8 +287,8 @@ def simulate_database_error():
         "error_type": "database",
         "endpoint": "/simulate/database-error",
         "message": "Simulated database error for testing"
-    })
-    structured_logger.log_database_operation("SELECT", "invalid_table", False)
+    }, log_level='DEV')
+    structured_logger.log_database_operation("SELECT", "invalid_table", False, log_level='DEV')
 
     return jsonify({'error': 'Database connection failed', 'simulated': True}), 503
 
@@ -298,7 +299,7 @@ def simulate_auth_error():
         "error_type": "401",
         "endpoint": "/simulate/auth-error",
         "message": "Simulated authentication error for testing"
-    })
+    }, log_level='DEV')
 
     return jsonify({'error': 'Authentication required', 'simulated': True}), 401
 

@@ -50,9 +50,7 @@
                             <button class="btn btn-primary btn-sm" onclick="viewMetrics()">
                                 <i class="bi bi-graph-up"></i> View Metrics
                             </button>
-                            <button class="btn btn-outline-primary btn-sm" onclick="checkSplunkStatus()">
-                                <i class="bi bi-cloud"></i> Splunk Status
-                            </button>
+                            
                         </div>
 
                         <h6 class="text-muted mb-3">Test Results</h6>
@@ -390,27 +388,7 @@
             updateTestResults('✅ Metrics endpoint opened in new tab', 'success');
         }
 
-        // Check Splunk status function
-        async function checkSplunkStatus() {
-            updateTestResults('Checking Splunk status...', 'info');
-            try {
-                const response = await fetch('/splunk/status');
-                const data = await response.json();
-
-                if (response.ok) {
-                    const status = data.splunk_configured ? '✅ Configured' : '❌ Not configured';
-                    updateTestResults(`Splunk Status: ${status}`, data.splunk_configured ? 'success' : 'error');
-                    showToast(`Splunk is ${data.splunk_configured ? 'configured' : 'not configured'}`,
-                        data.splunk_configured ? 'success' : 'error');
-                } else {
-                    updateTestResults('❌ Splunk Status: Failed to check', 'error');
-                    showToast('Failed to check Splunk status', 'error');
-                }
-            } catch (error) {
-                updateTestResults(`❌ Splunk Status: ${error.message}`, 'error');
-                showToast('Splunk status check failed: ' + error.message, 'error');
-            }
-        }
+        
 
         // Update test results display
         function updateTestResults(message, type = 'info') {

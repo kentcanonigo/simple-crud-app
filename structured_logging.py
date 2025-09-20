@@ -20,13 +20,11 @@ class JSONFormatter(logging.Formatter):
         # Add request context if available
         try:
             if request:
-                log_entry['request'] = {
-                    'method': request.method,
-                    'path': request.path,
-                    'remote_addr': request.remote_addr,
-                    'user_agent': request.headers.get('User-Agent', ''),
-                    'request_id': getattr(g, 'request_id', '')
-                }
+                log_entry['http_method'] = request.method
+                log_entry['url'] = request.path
+                log_entry['remote_addr'] = request.remote_addr
+                log_entry['user_agent'] = request.headers.get('User-Agent', '')
+                log_entry['request_id'] = getattr(g, 'request_id', '')
         except RuntimeError:
             # Outside request context
             pass
@@ -71,22 +69,19 @@ class StructuredLogger:
     def __init__(self, logger_name='todoapp'):
         self.logger = logging.getLogger(logger_name)
 
-    def log_business_event(self, event_type, data=None):
+    def log_business_event(self, event_type, data=None, log_level='INFO'):
         """Log business events with structured data"""
         log_data = {
             'event_type': 'business_event',
             'business_event': event_type,
             'data': data or {},
-            'extra_fields': {
-                'event_category': 'business',
-                'source': 'todoapp'
-            }
+            'log_level': log_level
         }
 
         # Add to record for JSON formatter
         record = logging.LogRecord(
             name=self.logger.name,
-            level=logging.INFO,
+            level=getattr(logging, log_level.upper(), logging.INFO),
             pathname='',
             lineno=0,
             msg=f"Business event: {event_type}",
@@ -97,21 +92,21 @@ class StructuredLogger:
 
         self.logger.handle(record)
 
-    def log_database_operation(self, operation, table, success, error=None):
+    def log_database_operation(self, operation, table, success, error=None, log_level=None):
         """Log database operations"""
+        if log_level is None:
+            log_level = 'INFO' if success else 'ERROR'
+
         log_data = {
             'event_type': 'database_operation',
             'operation': operation,
             'table': table,
             'success': success,
             'error': error,
-            'extra_fields': {
-                'event_category': 'database',
-                'source': 'todoapp'
-            }
+            'log_level': log_level
         }
 
-        level = logging.INFO if success else logging.ERROR
+        level = getattr(logging, log_level.upper(), logging.INFO)
         message = f"Database {operation} on {table}: {'SUCCESS' if success else 'FAILED'}"
 
         record = logging.LogRecord(
@@ -127,21 +122,21 @@ class StructuredLogger:
 
         self.logger.handle(record)
 
-    def log_request(self, method, endpoint, status_code, duration):
+    def log_request(self, method, endpoint, status_code, duration, log_level=None):
         """Log HTTP request details"""
+        if log_level is None:
+            log_level = 'INFO' if status_code < 400 else 'WARN'
+
         log_data = {
             'event_type': 'http_request',
             'http_method': method,
             'endpoint': endpoint,
             'status_code': status_code,
             'duration_seconds': duration,
-            'extra_fields': {
-                'event_category': 'http',
-                'source': 'todoapp'
-            }
+            'log_level': log_level
         }
 
-        level = logging.INFO if status_code < 400 else logging.WARNING
+        level = getattr(logging, log_level.upper(), logging.INFO)
         message = f"{method} {endpoint} {status_code} ({duration:.3f}s)"
 
         record = logging.LogRecord(
@@ -157,22 +152,19 @@ class StructuredLogger:
 
         self.logger.handle(record)
 
-    def log_error(self, error_type, error_message, context=None):
+    def log_error(self, error_type, error_message, context=None, log_level='ERROR'):
         """Log application errors"""
         log_data = {
             'event_type': 'application_error',
             'error_type': error_type,
             'error_message': error_message,
             'context': context or {},
-            'extra_fields': {
-                'event_category': 'error',
-                'source': 'todoapp'
-            }
+            'log_level': log_level
         }
 
         record = logging.LogRecord(
             name=self.logger.name,
-            level=logging.ERROR,
+            level=getattr(logging, log_level.upper(), logging.ERROR),
             pathname='',
             lineno=0,
             msg=f"Application error: {error_type} - {error_message}",
