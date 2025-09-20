@@ -70,7 +70,7 @@ pipeline {
                         sed "s|image: todoapp:latest|image: ${DOCKER_REGISTRY}/${DOCKER_USERNAME}/${APP_NAME}:${IMAGE_TAG}|g" k8s-deployment.yaml > k8s-deployment-temp.yaml
 
                         # Apply manifests
-                        kubectl apply -f k8s-deployment-temp.yaml
+                        kubectl apply -f k8s-deployment-temp.yaml -n ${NAMESPACE}
 
                         # Wait for rollout to finish
                         kubectl rollout status deployment/todoapp -n ${NAMESPACE}
