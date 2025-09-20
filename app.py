@@ -3,13 +3,13 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from dotenv import load_dotenv
-from splunk_integration import create_splunk_integration
 from structured_logging import setup_structured_logging, StructuredLogger
 import time
 import os
 import pymysql
 import logging
 import uuid
+from sqlalchemy import text
 
 # Load environment variables from .env file
 load_dotenv()
@@ -55,9 +55,6 @@ migrate = Migrate(app, db)
 REQUEST_COUNT = Counter('flask_requests_total', 'Total requests', ['method', 'endpoint'])
 REQUEST_LATENCY = Histogram('flask_request_duration_seconds', 'Request latency')
 
-# Initialize Splunk integration (fallback for direct HEC if needed)
-splunk_hec, splunk_metrics_exporter, splunk_logger = create_splunk_integration()
-
 # Configure structured logging for Kubernetes/Splunk
 setup_structured_logging()
 structured_logger = StructuredLogger('todoapp')
@@ -100,18 +97,6 @@ def after_request(response):
     except Exception as e:
         logging.error(f"Failed to log request: {e}")
 
-    # Fallback to direct Splunk HEC if configured
-    if splunk_logger:
-        try:
-            splunk_logger.log_request(
-                method=request.method,
-                endpoint=request.endpoint or request.path,
-                status_code=response.status_code,
-                duration=request_latency
-            )
-        except Exception as e:
-            logging.error(f"Failed to log request to Splunk HEC: {e}")
-
     return response
 
 @app.route('/')
@@ -132,11 +117,6 @@ def create_todo():
             "reason": "missing_title",
             "request_data": data
         })
-        if splunk_logger:
-            splunk_logger.log_business_event("todo_creation_failed", {
-                "reason": "missing_title",
-                "request_data": data
-            })
         return jsonify({'error': 'Title is required'}), 400
 
     todo = Todo(
@@ -157,26 +137,12 @@ def create_todo():
         })
         structured_logger.log_database_operation("INSERT", "todos", True)
 
-        # Fallback to direct Splunk HEC if configured
-        if splunk_logger:
-            splunk_logger.log_business_event("todo_created", {
-                "todo_id": todo.id,
-                "title": todo.title,
-                "completed": todo.completed
-            })
-            splunk_logger.log_database_operation("INSERT", "todos", True)
-
         return jsonify(todo.to_dict()), 201
 
     except Exception as e:
         db.session.rollback()
         structured_logger.log_error("database_error", str(e), context={"operation": "create_todo"})
         structured_logger.log_database_operation("INSERT", "todos", False)
-
-        # Fallback to direct Splunk HEC if configured
-        if splunk_logger:
-            splunk_logger.log_error("database_error", str(e), context={"operation": "create_todo"})
-            splunk_logger.log_database_operation("INSERT", "todos", False)
         return jsonify({'error': 'Failed to create todo'}), 500
 
 @app.route('/api/todos/<int:todo_id>', methods=['PUT'])
@@ -252,83 +218,12 @@ def delete_todo(todo_id):
 def metrics():
     return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
 
-@app.route('/splunk/export-metrics', methods=['POST'])
-def export_metrics_to_splunk():
-    """Export Prometheus metrics to Splunk HEC"""
-    if not splunk_metrics_exporter:
-        return jsonify({
-            'error': 'Splunk integration not configured',
-            'message': 'Set SPLUNK_HEC_URL and SPLUNK_HEC_TOKEN environment variables'
-        }), 400
-
-    try:
-        result = splunk_metrics_exporter.export_prometheus_metrics()
-        return jsonify({
-            'status': 'success',
-            'exported_metrics': result['exported_count'],
-            'errors': result['errors'],
-            'timestamp': result['timestamp']
-        }), 200
-    except Exception as e:
-        structured_logger.log_error("metrics_export_error", str(e))
-        if splunk_logger:
-            splunk_logger.log_error("metrics_export_error", str(e))
-        return jsonify({'error': f'Failed to export metrics: {str(e)}'}), 500
-
-@app.route('/splunk/test', methods=['POST'])
-def test_splunk_connection():
-    """Test Splunk HEC connection"""
-    if not splunk_hec:
-        return jsonify({
-            'error': 'Splunk integration not configured',
-            'message': 'Set SPLUNK_HEC_URL and SPLUNK_HEC_TOKEN environment variables'
-        }), 400
-
-    try:
-        test_event = {
-            "event_type": "connection_test",
-            "app": "todoapp",
-            "message": "Splunk HEC connection test",
-            "test_timestamp": time.time()
-        }
-
-        success = splunk_hec.send_event(test_event)
-
-        if success:
-            return jsonify({
-                'status': 'success',
-                'message': 'Successfully connected to Splunk HEC'
-            }), 200
-        else:
-            return jsonify({
-                'status': 'failed',
-                'message': 'Failed to send test event to Splunk HEC'
-            }), 500
-
-    except Exception as e:
-        return jsonify({'error': f'Connection test failed: {str(e)}'}), 500
-
-@app.route('/splunk/status')
-def splunk_status():
-    """Get Splunk integration status"""
-    return jsonify({
-        'splunk_configured': splunk_hec is not None,
-        'metrics_exporter_available': splunk_metrics_exporter is not None,
-        'logger_available': splunk_logger is not None,
-        'configuration': {
-            'hec_url_set': bool(os.environ.get('SPLUNK_HEC_URL')),
-            'hec_token_set': bool(os.environ.get('SPLUNK_HEC_TOKEN')),
-            'index': os.environ.get('SPLUNK_INDEX', 'main'),
-            'source': os.environ.get('SPLUNK_SOURCE', 'todoapp')
-        }
-    })
-
 @app.route('/health')
 def health_check():
     """Health check endpoint for monitoring"""
     try:
         # Test database connection
-        db.session.execute('SELECT 1')
+        db.session.execute(text('SELECT 1'))
         db_status = "healthy"
     except Exception as e:
         db_status = f"unhealthy: {str(e)}"
@@ -346,13 +241,6 @@ def health_check():
     except Exception as e:
         logging.error(f"Failed to log health check: {e}")
 
-    # Fallback to direct Splunk HEC if configured
-    if splunk_logger:
-        try:
-            splunk_logger.log_business_event("health_check", health_data)
-        except Exception as e:
-            logging.error(f"Failed to log health check to Splunk HEC: {e}")
-
     status_code = 200 if health_data['status'] == 'healthy' else 503
     return jsonify(health_data), status_code
 
@@ -365,16 +253,6 @@ def simulate_404():
         "message": "Simulated 404 error for testing"
     })
 
-    if splunk_logger:
-        try:
-            splunk_logger.log_business_event("simulated_error", {
-                "error_type": "404",
-                "endpoint": "/simulate/404",
-                "message": "Simulated 404 error for testing"
-            })
-        except Exception as e:
-            logging.error(f"Failed to log simulated error to Splunk HEC: {e}")
-
     return jsonify({'error': 'Resource not found', 'simulated': True}), 404
 
 @app.route('/simulate/500')
@@ -385,16 +263,6 @@ def simulate_500():
         "endpoint": "/simulate/500",
         "message": "Simulated 500 error for testing"
     })
-
-    if splunk_logger:
-        try:
-            splunk_logger.log_business_event("simulated_error", {
-                "error_type": "500",
-                "endpoint": "/simulate/500",
-                "message": "Simulated 500 error for testing"
-            })
-        except Exception as e:
-            logging.error(f"Failed to log simulated error to Splunk HEC: {e}")
 
     return jsonify({'error': 'Internal server error', 'simulated': True}), 500
 
@@ -407,16 +275,6 @@ def simulate_timeout():
         "delay_seconds": 5,
         "message": "Simulated slow response for testing"
     })
-
-    if splunk_logger:
-        try:
-            splunk_logger.log_business_event("simulated_slow_response", {
-                "endpoint": "/simulate/timeout",
-                "delay_seconds": 5,
-                "message": "Simulated slow response for testing"
-            })
-        except Exception as e:
-            logging.error(f"Failed to log simulated timeout to Splunk HEC: {e}")
 
     time.sleep(5)  # 5 second delay
     return jsonify({'message': 'Slow response completed', 'delay': '5 seconds', 'simulated': True}), 200
@@ -431,17 +289,6 @@ def simulate_database_error():
     })
     structured_logger.log_database_operation("SELECT", "invalid_table", False)
 
-    if splunk_logger:
-        try:
-            splunk_logger.log_business_event("simulated_error", {
-                "error_type": "database",
-                "endpoint": "/simulate/database-error",
-                "message": "Simulated database error for testing"
-            })
-            splunk_logger.log_database_operation("SELECT", "invalid_table", False)
-        except Exception as e:
-            logging.error(f"Failed to log simulated database error to Splunk HEC: {e}")
-
     return jsonify({'error': 'Database connection failed', 'simulated': True}), 503
 
 @app.route('/simulate/auth-error')
@@ -452,16 +299,6 @@ def simulate_auth_error():
         "endpoint": "/simulate/auth-error",
         "message": "Simulated authentication error for testing"
     })
-
-    if splunk_logger:
-        try:
-            splunk_logger.log_business_event("simulated_error", {
-                "error_type": "401",
-                "endpoint": "/simulate/auth-error",
-                "message": "Simulated authentication error for testing"
-            })
-        except Exception as e:
-            logging.error(f"Failed to log simulated auth error to Splunk HEC: {e}")
 
     return jsonify({'error': 'Authentication required', 'simulated': True}), 401
 
