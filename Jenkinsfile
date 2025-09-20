@@ -33,7 +33,7 @@ pipeline {
     environment {
         DOCKER_REGISTRY = 'docker.io'
         DOCKER_USERNAME = 'rcanonigo'
-        APP_NAME = 'todo-app'
+        APP_NAME = 'todo-webapp-observability'
         NAMESPACE = 'todo-app'
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
