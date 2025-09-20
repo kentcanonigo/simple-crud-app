@@ -20,26 +20,12 @@ pipeline {
                     - name: docker-config
                       mountPath: /kaniko/.docker
                       readOnly: true
-                    resources:
-                      requests:
-                        memory: "512Mi"
-                        cpu: "500m"
-                      limits:
-                        memory: "1Gi"
-                        cpu: "1000m"
                   - name: kubectl
                     image: alpine/k8s:1.28.13
                     command:
                     - sleep
                     args:
                     - 9999999
-                    resources:
-                      requests:
-                        memory: "128Mi"
-                        cpu: "100m"
-                      limits:
-                        memory: "256Mi"
-                        cpu: "200m"
                   volumes:
                   - name: docker-config
                     secret:
@@ -60,13 +46,6 @@ pipeline {
     }
 
     stages {
-
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
         stage('Build Image') {
             steps {
                 container('kaniko') {
