@@ -74,8 +74,7 @@ class StructuredLogger:
         log_data = {
             'event_type': 'business_event',
             'business_event': event_type,
-            'data': data or {},
-            'log_level': log_level
+            'data': data or {}
         }
 
         # Add to record for JSON formatter
@@ -102,8 +101,7 @@ class StructuredLogger:
             'operation': operation,
             'table': table,
             'success': success,
-            'error': error,
-            'log_level': log_level
+            'error': error
         }
 
         level = getattr(logging, log_level.upper(), logging.INFO)
@@ -132,8 +130,7 @@ class StructuredLogger:
             'http_method': method,
             'endpoint': endpoint,
             'status_code': status_code,
-            'duration_seconds': duration,
-            'log_level': log_level
+            'duration_seconds': duration
         }
 
         level = getattr(logging, log_level.upper(), logging.INFO)
@@ -158,8 +155,7 @@ class StructuredLogger:
             'event_type': 'application_error',
             'error_type': error_type,
             'error_message': error_message,
-            'context': context or {},
-            'log_level': log_level
+            'context': context or {}
         }
 
         record = logging.LogRecord(
