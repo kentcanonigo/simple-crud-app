@@ -12,6 +12,7 @@ spec:
   template:
     metadata:
       labels:
+        splunk/type: webapp
         app: todoapp
     spec:
       containers:
