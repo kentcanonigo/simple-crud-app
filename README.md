@@ -1,20 +1,21 @@
 # Simple Todo List App
 
-A production-ready Flask todo list application with Bootstrap frontend, MySQL/SQLite database support, Prometheus metrics, and Splunk integration.
+A production-ready Flask todo list application with a Bootstrap 5 frontend, MySQL/SQLite database support, Prometheus metrics, and structured JSON logging.
 
 ## 🚀 Features
 
-- ✅ **Full CRUD Operations** - Create, read, update, and delete todos
-- ✅ **Responsive UI** - Bootstrap 5 frontend with interactive JavaScript
-- ✅ **Database Flexibility** - Toggle between SQLite and MySQL with environment variables
-- ✅ **Production Ready** - Docker, Kubernetes, and cloud deployment support
-- ✅ **Metrics & Monitoring** - Prometheus metrics endpoint
-- ✅ **Splunk Integration** - Comprehensive logging and metrics export to Splunk
-- ✅ **Database Migrations** - Flask-Migrate support for schema versioning
+- ✅ **Full CRUD Operations** - Create, read, update, and delete todos.
+- ✅ **Responsive UI** - Interactive frontend built with Bootstrap 5 and vanilla JavaScript.
+- ✅ **Database Flexibility** - Toggle between SQLite and MySQL with environment variables.
+- ✅ **Production Ready** - Docker and Kubernetes support for easy deployment.
+- ✅ **Observability** - Prometheus metrics endpoint and structured JSON logging.
+- ✅ **Database Migrations** - Flask-Migrate support for schema versioning.
+- ✅ **Testing Panel** - UI for health checks and simulating various errors (404, 500, timeout, etc.).
 
 ## 🛠️ Quick Start
 
 ### Option 1: Docker Compose (Recommended)
+
 ```bash
 # Clone and start the full stack
 git clone <repository>
@@ -23,6 +24,7 @@ docker-compose up -d
 ```
 
 ### Option 2: Local Development
+
 ```bash
 # Install dependencies
 pip install -r requirements.txt
@@ -34,44 +36,31 @@ cp .env.example .env
 python app.py
 ```
 
-### Option 3: Local with MySQL
-```bash
-# Install and start MySQL
-# Create database: CREATE DATABASE todoapp;
-# Create user: CREATE USER 'todoapp'@'localhost' IDENTIFIED BY 'todoapp123';
-# Grant permissions: GRANT ALL PRIVILEGES ON todoapp.* TO 'todoapp'@'localhost';
-
-# Configure environment
-echo "DATABASE_TYPE=mysql" >> .env
-
-# Run application
-python app.py
-```
-
 ## 🌐 Access Points
 
 - **Web UI**: http://localhost:5000
 - **API**: http://localhost:5000/api/todos
 - **Prometheus Metrics**: http://localhost:5000/metrics
-- **Splunk Status**: http://localhost:5000/splunk/status
+- **Health Check**: http://localhost:5000/health
 
 ## 📊 API Endpoints
 
 ### Todo Operations
+
 - `GET /api/todos` - List all todos
 - `POST /api/todos` - Create new todo
 - `PUT /api/todos/<id>` - Update todo
 - `DELETE /api/todos/<id>` - Delete todo
 
-### Monitoring & Observability
+### Monitoring & Health
+
 - `GET /metrics` - Prometheus metrics
-- `GET /splunk/status` - Splunk integration status
-- `POST /splunk/export-metrics` - Export metrics to Splunk
-- `POST /splunk/test` - Test Splunk connection
+- `GET /health` - Application health check
 
 ## ⚙️ Configuration
 
 ### Database Configuration
+
 ```bash
 # Use SQLite (default)
 DATABASE_TYPE=sqlite
@@ -88,23 +77,21 @@ MYSQL_DATABASE=todoapp
 DATABASE_URL=mysql+pymysql://user:pass@host:port/database
 ```
 
-### Splunk Integration (Optional)
-```bash
-SPLUNK_HEC_URL=https://your-splunk-instance.com:8088
-SPLUNK_HEC_TOKEN=your-hec-token-here
-SPLUNK_INDEX=main
-SPLUNK_SOURCE=todoapp
-```
-
 ## 📦 Deployment
 
 ### Kubernetes
+
+The Kubernetes manifests are located in the `k8s/` directory.
+
 ```bash
-# Update secrets in k8s-deployment.yaml
-kubectl apply -f k8s-deployment.yaml
+# Apply all manifests
+kubectl apply -f k8s/
 ```
 
+Make sure your Kubernetes cluster has access to the Docker image. The Jenkinsfile provides an example of how to build and push the image, and then deploy to Kubernetes.
+
 ### Docker
+
 ```bash
 # Build and run
 docker build -t todoapp .
@@ -114,25 +101,31 @@ docker run -p 5000:5000 todoapp
 ## 🔍 Monitoring Features
 
 ### Prometheus Metrics
-- HTTP request counts by method and endpoint
-- Request latency histograms
-- Python runtime metrics
 
-### Splunk Logging
-- **Request Logging**: All HTTP requests with duration and status
-- **Business Events**: Todo operations with context
-- **Error Logging**: Application errors with stack traces
-- **Database Operations**: Success/failure of database operations
+- HTTP request counts by method and endpoint.
+- Request latency histograms.
+
+### Structured Logging
+
+The application outputs structured JSON logs to `stdout`. This is ideal for collection and analysis by a log aggregation platform like Elasticsearch, Splunk, or Datadog.
+
+- **Request Logging**: All HTTP requests with duration and status.
+- **Business Events**: Todo operations (create, update, delete) with context.
+- **Error Logging**: Application errors and database operation failures.
 
 ## 🏗️ Architecture
 
 - **Backend**: Flask with SQLAlchemy ORM
 - **Frontend**: Bootstrap 5 with vanilla JavaScript
 - **Database**: SQLite (development) / MySQL (production)
-- **Monitoring**: Prometheus + Splunk integration
-- **Deployment**: Docker, Kubernetes, cloud-ready
+- **Monitoring**: Prometheus for metrics and structured JSON logging.
+- **Deployment**: Docker, Kubernetes, cloud-ready.
 
 ## 🧪 Testing
+
+The web UI includes a "Testing & Monitoring" panel to perform health checks and simulate various error conditions.
+
+You can also use `curl` to test the API endpoints:
 
 ```bash
 # Test API
@@ -141,18 +134,19 @@ curl http://localhost:5000/api/todos
 # Create todo
 curl -X POST http://localhost:5000/api/todos \
   -H "Content-Type: application/json" \
-  -d '{"title": "Test Todo", "description": "Testing the API"}'
+  -d '''{"title": "Test Todo", "description": "Testing the API"}'''
 
 # Check metrics
 curl http://localhost:5000/metrics
 
-# Check Splunk status
-curl http://localhost:5000/splunk/status
+# Check health
+curl http://localhost:5000/health
 ```
 
 ## 📝 Development
 
 ### Database Migrations
+
 ```bash
 # Initialize migrations (first time)
 flask db init
@@ -165,16 +159,17 @@ flask db upgrade
 ```
 
 ### Environment Variables
+
 See `.env.example` for all available configuration options.
 
 ## 🚀 Production Considerations
 
-- Use `FLASK_ENV=production`
-- Configure external MySQL database
-- Set up Splunk HEC for logging
-- Use proper secrets management for database credentials
-- Deploy with multiple replicas for high availability
-- Configure load balancer and SSL termination
+- Use `FLASK_ENV=production`.
+- Configure an external MySQL database.
+- Set up a log collector to process the structured JSON logs from `stdout`.
+- Use proper secrets management for database credentials in Kubernetes.
+- Deploy with multiple replicas for high availability.
+- Configure a load balancer and SSL termination.
 
 ## 📄 License
 
