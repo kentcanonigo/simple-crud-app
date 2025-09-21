@@ -66,11 +66,11 @@ pipeline {
             steps {
                 container('kubectl') {
                     sh """
+                        # Inject built image with tag into deployment before applying
+                        sed -i "s|image: todoapp:latest|image: ${DOCKER_REGISTRY}/${DOCKER_USERNAME}/${APP_NAME}:${IMAGE_TAG}|g" k8s/todoapp-deployment.yaml
+
                         # Apply all manifests in the k8s directory
                         kubectl apply -f k8s/ -n ${NAMESPACE}
-
-                        # Update the image for the todoapp deployment
-                        kubectl set image deployment/todoapp todoapp=${DOCKER_REGISTRY}/${DOCKER_USERNAME}/${APP_NAME}:${IMAGE_TAG} -n ${NAMESPACE}
 
                         # Wait for rollout to finish
                         kubectl rollout status deployment/todoapp -n ${NAMESPACE}
