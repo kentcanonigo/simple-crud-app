@@ -254,7 +254,7 @@ def simulate_404():
         "error_type": "404",
         "endpoint": "/simulate/404",
         "message": "Simulated 404 error for testing"
-    }, log_level='DEV')
+    }, log_level='WARN')
 
     return jsonify({'error': 'Resource not found', 'simulated': True}), 404
 
@@ -265,7 +265,7 @@ def simulate_500():
         "error_type": "500",
         "endpoint": "/simulate/500",
         "message": "Simulated 500 error for testing"
-    }, log_level='DEV')
+    }, log_level='ERROR')
 
     return jsonify({'error': 'Internal server error', 'simulated': True}), 500
 
@@ -277,7 +277,7 @@ def simulate_timeout():
         "endpoint": "/simulate/timeout",
         "delay_seconds": 5,
         "message": "Simulated slow response for testing"
-    }, log_level='DEV')
+    }, log_level='WARN')
 
     time.sleep(5)  # 5 second delay
     return jsonify({'message': 'Slow response completed', 'delay': '5 seconds', 'simulated': True}), 200
@@ -289,8 +289,8 @@ def simulate_database_error():
         "error_type": "database",
         "endpoint": "/simulate/database-error",
         "message": "Simulated database error for testing"
-    }, log_level='DEV')
-    structured_logger.log_database_operation("SELECT", "invalid_table", False, log_level='DEV')
+    }, log_level='CRITICAL')
+    structured_logger.log_database_operation("SELECT", "invalid_table", False, log_level='CRITICAL')
 
     return jsonify({'error': 'Database connection failed', 'simulated': True}), 503
 
@@ -301,7 +301,7 @@ def simulate_auth_error():
         "error_type": "401",
         "endpoint": "/simulate/auth-error",
         "message": "Simulated authentication error for testing"
-    }, log_level='DEV')
+    }, log_level='WARN')
 
     return jsonify({'error': 'Authentication required', 'simulated': True}), 401
 
