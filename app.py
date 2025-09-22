@@ -305,6 +305,35 @@ def simulate_auth_error():
 
     return jsonify({'error': 'Authentication required', 'simulated': True}), 401
 
+@app.route('/simulate/add-todo-error', methods=['POST'])
+def simulate_add_todo_error():
+    """Simulate a failed todo creation"""
+    structured_logger.log_error("database_error", "Simulated database error on create", context={"operation": "create_todo"}, log_level='CRITICAL')
+    structured_logger.log_database_operation("INSERT", "todos", False, log_level='CRITICAL')
+    return jsonify({'error': 'Failed to create todo (simulated)'}), 500
+
+@app.route('/simulate/update-todo-error', methods=['PUT'])
+def simulate_update_todo_error():
+    """Simulate a failed todo update"""
+    todo = Todo.query.order_by(Todo.id.desc()).first()
+    if todo:
+        structured_logger.log_error("database_error", "Simulated database error on update", context={"operation": "update_todo", "todo_id": todo.id}, log_level='CRITICAL')
+        structured_logger.log_database_operation("UPDATE", "todos", False, log_level='CRITICAL')
+        return jsonify({'error': f'Failed to update todo {todo.id} (simulated)'}), 500
+    else:
+        return jsonify({'error': 'No todos to update (simulated)'}), 404
+
+@app.route('/simulate/delete-todo-error', methods=['DELETE'])
+def simulate_delete_todo_error():
+    """Simulate a failed todo deletion"""
+    todo = Todo.query.order_by(Todo.id.desc()).first()
+    if todo:
+        structured_logger.log_error("database_error", "Simulated database error on delete", context={"operation": "delete_todo", "todo_id": todo.id}, log_level='CRITICAL')
+        structured_logger.log_database_operation("DELETE", "todos", False, log_level='CRITICAL')
+        return jsonify({'error': f'Failed to delete todo {todo.id} (simulated)'}), 500
+    else:
+        return jsonify({'error': 'No todos to delete (simulated)'}), 404
+
 def create_app():
     """Application factory pattern for better testability"""
     return app

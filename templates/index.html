@@ -45,6 +45,19 @@
                             </button>
                         </div>
 
+                        <h6 class="text-muted mb-3">Simulate CRUD Errors</h6>
+                        <div class="d-grid gap-2 mb-3">
+                            <button class="btn btn-danger btn-sm" onclick="simulateAddTodoError()">
+                                <i class="bi bi-plus-circle-fill"></i> Fail Add
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="simulateUpdateTodoError()">
+                                <i class="bi bi-pencil-fill"></i> Fail Update
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="simulateDeleteTodoError()">
+                                <i class="bi bi-trash-fill"></i> Fail Delete
+                            </button>
+                        </div>
+
                         <h6 class="text-muted mb-3">Monitoring</h6>
                         <div class="d-grid gap-2 mb-3">
                             <button class="btn btn-primary btn-sm" onclick="viewMetrics()">
@@ -378,6 +391,63 @@
                 const duration = endTime - startTime;
                 updateTestResults(`❌ ${errorType.toUpperCase()}: Network error (${duration}ms)`, 'error');
                 showToast(`${errorType} simulation failed: ` + error.message, 'error');
+            }
+        }
+
+        // Simulate Add Todo Error
+        async function simulateAddTodoError() {
+            updateTestResults('Simulating add todo error...', 'info');
+            try {
+                const response = await fetch('/simulate/add-todo-error', { method: 'POST' });
+                const data = await response.json();
+                if (response.ok) {
+                    updateTestResults('✅ Add Todo Error Simulated', 'success');
+                    showToast('Add todo error simulated', 'success');
+                } else {
+                    updateTestResults(`❌ Add Todo Error: ${data.error} (${response.status})`, 'error');
+                    showToast(`Add todo error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                updateTestResults(`❌ Add Todo Error: ${error.message}`, 'error');
+                showToast('Add todo error: ' + error.message, 'error');
+            }
+        }
+
+        // Simulate Update Todo Error
+        async function simulateUpdateTodoError() {
+            updateTestResults('Simulating update todo error...', 'info');
+            try {
+                const response = await fetch('/simulate/update-todo-error', { method: 'PUT' });
+                const data = await response.json();
+                if (response.ok) {
+                    updateTestResults('✅ Update Todo Error Simulated', 'success');
+                    showToast('Update todo error simulated', 'success');
+                } else {
+                    updateTestResults(`❌ Update Todo Error: ${data.error} (${response.status})`, 'error');
+                    showToast(`Update todo error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                updateTestResults(`❌ Update Todo Error: ${error.message}`, 'error');
+                showToast('Update todo error: ' + error.message, 'error');
+            }
+        }
+
+        // Simulate Delete Todo Error
+        async function simulateDeleteTodoError() {
+            updateTestResults('Simulating delete todo error...', 'info');
+            try {
+                const response = await fetch('/simulate/delete-todo-error', { method: 'DELETE' });
+                const data = await response.json();
+                if (response.ok) {
+                    updateTestResults('✅ Delete Todo Error Simulated', 'success');
+                    showToast('Delete todo error simulated', 'success');
+                } else {
+                    updateTestResults(`❌ Delete Todo Error: ${data.error} (${response.status})`, 'error');
+                    showToast(`Delete todo error: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                updateTestResults(`❌ Delete Todo Error: ${error.message}`, 'error');
+                showToast('Delete todo error: ' + error.message, 'error');
             }
         }
 
