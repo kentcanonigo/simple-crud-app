@@ -1,7 +1,7 @@
 pipeline {
     agent {
         kubernetes {
-            yaml """
+            yaml '''
                 apiVersion: v1
                 kind: Pod
                 metadata:
@@ -33,7 +33,7 @@ pipeline {
                       items:
                       - key: .dockerconfigjson
                         path: config.json
-            """
+            '''
         }
     }
 
