@@ -125,6 +125,35 @@
         </div>
     </div>
 
+    <!-- Edit Todo Modal -->
+    <div class="modal fade" id="editTodoModal" tabindex="-1" aria-labelledby="editTodoModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editTodoModalLabel">Edit Todo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editTodoForm">
+                        <input type="hidden" id="editTodoId">
+                        <div class="mb-3">
+                            <label for="editTodoTitle" class="form-label">Title</label>
+                            <input type="text" class="form-control" id="editTodoTitle" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="editTodoDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="editTodoDescription" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="saveTodoChanges">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast for notifications -->
     <div class="toast-container position-fixed bottom-0 end-0 p-3">
         <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
@@ -263,16 +292,29 @@
             }
         }
 
-        // Edit todo (simple prompt-based editing)
+        // Edit todo
         async function editTodo(id) {
             const todo = todos.find(t => t.id === id);
             if (!todo) return;
 
-            const newTitle = prompt('Edit title:', todo.title);
-            if (newTitle === null) return; // User cancelled
+            document.getElementById('editTodoId').value = todo.id;
+            document.getElementById('editTodoTitle').value = todo.title;
+            document.getElementById('editTodoDescription').value = todo.description || '';
 
-            const newDescription = prompt('Edit description:', todo.description || '');
-            if (newDescription === null) return; // User cancelled
+            const modal = new bootstrap.Modal(document.getElementById('editTodoModal'));
+            modal.show();
+        }
+
+        // Save todo changes from modal
+        document.getElementById('saveTodoChanges').addEventListener('click', async () => {
+            const id = document.getElementById('editTodoId').value;
+            const title = document.getElementById('editTodoTitle').value.trim();
+            const description = document.getElementById('editTodoDescription').value.trim();
+
+            if (!title) {
+                showToast('Title is required', 'error');
+                return;
+            }
 
             try {
                 const response = await fetch(`/api/todos/${id}`, {
@@ -281,12 +323,14 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        title: newTitle.trim(),
-                        description: newDescription.trim()
+                        title: title,
+                        description: description
                     })
                 });
 
                 if (response.ok) {
+                    const modal = bootstrap.Modal.getInstance(document.getElementById('editTodoModal'));
+                    modal.hide();
                     loadTodos();
                     showToast('Todo updated successfully!', 'success');
                 } else {
@@ -295,7 +339,9 @@
             } catch (error) {
                 showToast('Error updating todo: ' + error.message, 'error');
             }
-        }
+        });
+
+        // Delete todo
 
         // Delete todo
         async function deleteTodo(id) {
