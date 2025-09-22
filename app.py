@@ -79,6 +79,7 @@ class Todo(db.Model):
 def before_request():
     request.start_time = time.time()
     g.request_id = str(uuid.uuid4())
+    g.request_logged = False  # Flag to check if the request has been logged
 
 @app.after_request
 def after_request(response):
@@ -86,17 +87,18 @@ def after_request(response):
     request_latency = time.time() - request.start_time
     REQUEST_LATENCY.observe(request_latency)
 
-    # Log request with structured logging
-    try:
-        structured_logger.log_request(
-            method=request.method,
-            endpoint=request.endpoint or request.path,
-            status_code=response.status_code,
-            duration=request_latency,
-            log_level='INFO'
-        )
-    except Exception as e:
-        logging.error(f"Failed to log request: {e}")
+    # Log request with structured logging only if it hasn't been logged already
+    if not g.get('request_logged', False):
+        try:
+            structured_logger.log_request(
+                method=request.method,
+                endpoint=request.endpoint or request.path,
+                status_code=response.status_code,
+                duration=request_latency,
+                log_level='INFO'
+            )
+        except Exception as e:
+            logging.error(f"Failed to log request: {e}")
 
     return response
 

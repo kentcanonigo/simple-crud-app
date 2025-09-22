@@ -71,6 +71,12 @@ class StructuredLogger:
 
     def log_business_event(self, event_type, data=None, log_level='INFO'):
         """Log business events with structured data"""
+        try:
+            if request:
+                g.request_logged = True
+        except RuntimeError:
+            pass  # Not in a request context
+
         log_data = {
             'event_type': 'business_event',
             'business_event': event_type,
@@ -151,6 +157,12 @@ class StructuredLogger:
 
     def log_error(self, error_type, error_message, context=None, log_level='ERROR'):
         """Log application errors"""
+        try:
+            if request:
+                g.request_logged = True
+        except RuntimeError:
+            pass  # Not in a request context
+            
         log_data = {
             'event_type': 'application_error',
             'error_type': error_type,
